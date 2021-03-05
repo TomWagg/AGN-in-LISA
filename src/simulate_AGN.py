@@ -45,11 +45,8 @@ def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
 
     Returns
     -------
-    sources : `Class`
-        LEGWORK sources class with all sources
-
-    params : `dict`
-        Dictionary of parameters not included in Source class
+    results : `dict`
+        Dictionary of results
     """
     # ensure the input is sensible
     assert gamma == 1 or gamma == 2, "Gamma must be 1 or 2"
@@ -104,6 +101,8 @@ def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
                                dist=distance, ecc=e_LISA, f_orb=f_orb_LISA,
                                sc_params={"t_obs": t_obs})
     snr = sources.get_snr(t_obs=t_obs, verbose=True)
+    max_snr_harmonic = sources.max_snr_harmonic
+    del sources
 
     sample_volume = max_distance**3
     n_AGN = galaxy_density * sample_volume * AGN_fraction
@@ -113,7 +112,14 @@ def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
 
     n_detection = n_AGN * fraction_GW_emission * fraction_detectable
 
-    params = {
+    results = {
+        "m_1": m_oligarch,
+        "m_2": m_immigrant,
+        "dist": distance,
+        "e_LISA": e_LISA,
+        "f_orb_LISA": f_orb_LISA,
+        "snr": snr,
+        "max_snr_harmonic": max_snr_harmonic,
         "AGN_age": AGN_age,
         "t_e2m": t_encounter_to_merge,
         "t_se": t_since_encounter,
@@ -123,7 +129,7 @@ def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
         "n_detections": n_detection
     }
 
-    return sources, params
+    return results
 
 
 def usage():
@@ -202,31 +208,31 @@ def main():
         output["test"] = "TEST"
 
     for i in range(loops):
-        sources, params = simulate_LISA_AGN_rate(n_AGN=n_AGN, gamma=gamma,
-                                                encounter_factor=encounter_factor,
-                                                t_obs=t_obs,
-                                                max_distance=max_distance,
-                                                galaxy_density=galaxy_density,
-                                                AGN_fraction=AGN_fraction,
-                                                snr_cutoff=snr_cutoff)
+        results = simulate_LISA_AGN_rate(n_AGN=n_AGN, gamma=gamma,
+                                         encounter_factor=encounter_factor,
+                                         t_obs=t_obs,
+                                         max_distance=max_distance,
+                                         galaxy_density=galaxy_density,
+                                         AGN_fraction=AGN_fraction,
+                                         snr_cutoff=snr_cutoff)
 
-        with h5.File(output_filepath.replace(".h5", "_loop{}.h5".format(i)), "w") as output:
-            output["m_1"] = sources.m_1
-            output["m_2"] = sources.m_2
-            output["a_enc"] = params["a_enc"]
-            output["e_enc"] = params["e_enc"]
-            output["a_LISA"] = sources.a
-            output["e_LISA"] = sources.ecc
-            output["f_orb_LISA"] = sources.f_orb
-            output["dist"] = sources.dist
-            output["snr"] = sources.snr
-            output["max_snr_harmonic"] = sources.max_snr_harmonic
-            output["age"] = params["AGN_age"]
-            output["t_e2m"] = params["t_e2m"]
-            output["t_se"] = params["t_se"]
-            output["m_oligarch_final"] = params["m_oligarch_final"]
+        with h5.File(output_filepath.replace(".h5", "_loop{}.h5".format(i)),
+                     "w") as output:
+            output["m_1"] = results["m_1"]
+            output["m_2"] = results["m_2"]
+            output["a_enc"] = results["a_enc"]
+            output["e_enc"] = results["e_enc"]
+            output["e_LISA"] = results["e_LISA"]
+            output["f_orb_LISA"] = results["f_orb_LISA"]
+            output["dist"] = results["dist"]
+            output["snr"] = results["snr"]
+            output["max_snr_harmonic"] = results["max_snr_harmonic"]
+            output["age"] = results["AGN_age"]
+            output["t_e2m"] = results["t_e2m"]
+            output["t_se"] = results["t_se"]
+            output["m_oligarch_final"] = results["m_oligarch_final"]
 
-            output.attrs["n_detect"] = params["n_detections"]
+            output.attrs["n_detect"] = results["n_detections"]
             output.attrs["gamma"] = gamma
             output.attrs["encounter_factor"] = encounter_factor
             output.attrs["t_obs"] = t_obs
@@ -234,6 +240,8 @@ def main():
             output.attrs["galaxy_density"] = galaxy_density
             output.attrs["AGN_fraction"] = AGN_fraction
             output.attrs["snr_cutoff"] = snr_cutoff
+
+        del results
 
 
 if __name__ == "__main__":
