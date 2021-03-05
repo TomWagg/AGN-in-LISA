@@ -1,5 +1,16 @@
 import numpy as np
 import astropy.units as u
+from scipy.stats import beta
+from scipy.integrate import quad
+from legwork.utils import get_a_from_ecc
+
+
+N_MERGER = [23, 15]
+G1_FIT = (29.297949585222668, 62.96530857667944,
+          55.55805086465139, 1240.7546363412412)
+G2_FIT = (7.346366250385888, 29.09437427063913,
+          81.18656481894848, 549.1138062470097)
+
 
 def p_e(e):
     """Find the probability that a binary will have eccentricity e after an
@@ -90,3 +101,57 @@ def sample_immigrant_mass(size=(1000,), gamma=1, m_min=5*u.Msun,
                  * ((1 / m_min) - (1 / m_max)))**(-1)
         
     return m_imm
+
+
+def fit_final_oligarch_mass(gamma, size=500000):
+    """Produce a fit for the final oligarch mass distribution
+
+    Parameters
+    ----------
+    gamma : `int`
+        Exponent of mass probability distribution (either 1 or 2)
+    size : `int`, optional
+        Size of sample to take for fitting, by default 500000
+
+    Returns
+    -------
+    fit : `tuple`
+        Fit for mass distribution
+    """
+    final_mass_sample = sample_immigrant_mass((N_MERGER[gamma - 1], size),
+                                              gamma=gamma).sum(axis=0)
+    return beta.fit(data=final_mass_sample.value)
+
+
+def a_from_t_merge(ecc_i, t_merge, beta):
+    """Find the initial semi-major axis given the initial eccentricity and
+    merger time. (Solve Peters 1964 Eq. 5.14 for c0 and convert to a_i using
+    Eq. 5.11)
+        
+    Parameters
+    ----------
+    ecc_i : `float/array`
+        Initial eccentricity
+
+    t_merge : `float/array`
+        Time until merger
+
+    beta : `float/array`
+        Beta constant from Peters 1964
+        
+    Returns
+    -------
+    a_i : `float/array`
+        Initial semi-major axis
+
+    c_0 : `float/array`
+        c0 constant from Peters 1964
+    """
+    intfunc = lambda e: (e**(29/19) * (1 + 121/304 * e**2)**(1181/2299))\
+        / (1 - e**2)**(3/2)
+
+    c_0 = np.array([(19/12 * t_merge[i] * beta[i]
+                     / quad(intfunc, 0, ecc_i[i])[0])**(1/4).to(u.AU).value
+                   for i in range(len(ecc_i))]) * u.AU
+    a_i = get_a_from_ecc(ecc=ecc_i, c_0=c_0)
+    return a_i, c_0
