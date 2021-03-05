@@ -2,11 +2,12 @@ import numpy as np
 import astropy.units as u
 import h5py as h5
 import legwork as lw
-import getopt, sys
-import time
+import getopt
+import sys
 
 
-from helpers import *
+from helpers import N_MERGER, FIT, a_from_t_merge, sample_immigrant_mass,\
+    rejection_sampling_e
 
 
 def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
@@ -46,7 +47,7 @@ def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
     -------
     sources : `Class`
         LEGWORK sources class with all sources
-    
+
     params : `dict`
         Dictionary of parameters not included in Source class
     """
@@ -57,35 +58,35 @@ def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
 
     # define the AGN lifetime as a megayear
     AGN_lifetime = 1 * u.Myr
-    
+
     # define the number of encounters given gamma
     n_encounters = encounter_factor * N_MERGER[gamma - 1]
 
     # work out average time between encounters
     encounter_timescale = (AGN_lifetime / n_encounters).to(u.yr)
-    
+
     # randomly sample AGN age and other times
     AGN_age = np.random.rand(n_AGN) * AGN_lifetime
     t_encounter_to_merge = np.random.rand(n_AGN) * encounter_timescale
     t_since_encounter = np.random.rand(n_AGN) * t_encounter_to_merge
-    
+
     # randomly sample distance to each AGN (uniform in volume)
     distance = np.random.rand(n_AGN)**(1/3) * max_distance
-    
+
     # randomly sample final oligarch mass for each AGN
     a, b, loc, scale = FIT[gamma - 1]
     final_m_oligarch = (np.random.beta(a=a, b=b, size=n_AGN)
                         * scale + loc) * u.Msun
-    
+
     # work out current oligarch mass based on growth at m->t^(3/2)
     m_oligarch = (final_m_oligarch / AGN_lifetime**(3/2)) * AGN_age**(3/2)
-    
+
     # randomly sample immigrant mass for each AGN based on gamma
     m_immigrant = sample_immigrant_mass(size=(n_AGN,), gamma=gamma)
 
     # draw eccentricity from Leigh+18 distribution
     e_enc = rejection_sampling_e(n_AGN)
-    
+
     # calculate separation based on mass, eccentricity and inspiral times
     beta = lw.utils.beta(m_oligarch, m_immigrant)
     a_enc, c0_enc = a_from_t_merge(e_enc, t_encounter_to_merge, beta)
@@ -94,7 +95,7 @@ def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
                               output_vars="ecc", t_evol=t_since_encounter,
                               n_step=2)
     e_LISA = e_evol.T[-1]
-    
+
     # convert to separation
     a_LISA = lw.utils.get_a_from_ecc(e_LISA, c0_enc)
     f_orb_LISA = lw.utils.get_f_orb_from_a(a_LISA, m_oligarch, m_immigrant)
@@ -121,8 +122,9 @@ def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
         "e_enc": e_enc,
         "n_detections": n_detection
     }
-    
+
     return sources, params
+
 
 def usage():
     print("usage: python simulate_AGN.py [options]")
@@ -137,6 +139,7 @@ def usage():
     print("\t-G, --galaxy-density     : Local galaxy density [1/Gpc^3]")
     print("\t-a, --AGN-fraction       : Fraction of galaxies that are AGN")
     print("\t-s, --snr-cutoff         : SNR detection threshold")
+
 
 def main():
     # get command line arguments and exit if error
@@ -160,7 +163,7 @@ def main():
     max_distance = 1 * u.Gpc
     galaxy_density = 4e6 * u.Gpc**(-3)
     AGN_fraction = 0.01
-    snr_cutoff = 7  
+    snr_cutoff = 7
 
     # change defaults based on input
     for option, value in opts:
@@ -219,7 +222,6 @@ def main():
         output.attrs["AGN_fraction"] = AGN_fraction
         output.attrs["snr_cutoff"] = snr_cutoff
 
+
 if __name__ == "__main__":
-    start = time.time()
     main()
-    print(time.time() - start)
