@@ -193,6 +193,10 @@ def main():
         elif option in ("-s", "--snr-cutoff"):
             snr_cutoff = float(value)
 
+    # check the file can be created without error
+    with h5.File(output_filepath, "w") as output:
+        output["test"] = "TEST"
+
     sources, params = simulate_LISA_AGN_rate(n_AGN=n_AGN, gamma=gamma,
                                              encounter_factor=encounter_factor,
                                              t_obs=t_obs,
