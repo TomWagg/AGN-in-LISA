@@ -6,10 +6,10 @@ from legwork.utils import get_a_from_ecc
 
 
 N_MERGER = [23, 15]
-G1_FIT = (29.297949585222668, 62.96530857667944,
-          55.55805086465139, 1240.7546363412412)
-G2_FIT = (7.346366250385888, 29.09437427063913,
-          81.18656481894848, 549.1138062470097)
+FIT = [(29.297949585222668, 62.96530857667944,
+        55.55805086465139, 1240.7546363412412),
+       (7.346366250385888, 29.09437427063913,
+        81.18656481894848, 549.1138062470097)]
 
 
 def p_e(e):
@@ -150,8 +150,8 @@ def a_from_t_merge(ecc_i, t_merge, beta):
     intfunc = lambda e: (e**(29/19) * (1 + 121/304 * e**2)**(1181/2299))\
         / (1 - e**2)**(3/2)
 
-    c_0 = np.array([(19/12 * t_merge[i] * beta[i]
-                     / quad(intfunc, 0, ecc_i[i])[0])**(1/4).to(u.AU).value
+    c_0 = np.array([((19/12 * t_merge[i] * beta[i]
+                     / quad(intfunc, 0, ecc_i[i])[0])**(1/4)).to(u.AU).value
                    for i in range(len(ecc_i))]) * u.AU
     a_i = get_a_from_ecc(ecc=ecc_i, c_0=c_0)
     return a_i, c_0
