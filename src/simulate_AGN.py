@@ -4,7 +4,7 @@ import h5py as h5
 import legwork as lw
 import getopt
 import sys
-
+import os.path
 
 from helpers import N_MERGER, FIT, a_from_t_merge, sample_immigrant_mass,\
     rejection_sampling_e
@@ -155,7 +155,11 @@ def main():
         sys.exit(2)
 
     # set default values
+    i = 0
     output_filepath = '../output/AGN_LISA_results.h5'
+    while os.path.isfile(output_filepath):
+        output_filepath = '../output/AGN_LISA_results_{}.h5'.format(i)
+        i += 1
     n_AGN = 200
     gamma = 1
     encounter_factor = 10
