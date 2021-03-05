@@ -126,9 +126,17 @@ def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
 
 def usage():
     print("usage: python simulate_AGN.py [options]")
-    print("\toptions:")
-    print("\t\t-h, --help  : print usage instructions")
-    print("\t\t-o, --output: path to output h5 file")
+    print("options:")
+    print("\t-h, --help               : print these usage instructions")
+    print("\t-o, --output             : path to output h5 file")
+    print("\t-n, --n-AGN              : number of AGN")
+    print("\t-g, --gamma              : BH mass distribution exponent (1,2)")
+    print("\t-e, --encounter-factor   : Encounters per binary (1-10)")
+    print("\t-m, --mission-length     : LISA Mission length [years]")
+    print("\t-d, --max-distance       : Maximum AGN distance [Gpc]")
+    print("\t-G, --galaxy-density     : Local galaxy density [1/Gpc^3]")
+    print("\t-a, --AGN-fraction       : Fraction of galaxies that are AGN")
+    print("\t-s, --snr-cutoff         : SNR detection threshold")
 
 def main():
     # get command line arguments and exit if error
