@@ -1,14 +1,18 @@
 import numpy as np
 import astropy.units as u
-from scipy.integrate import odeint
-import legwork
+import h5py as h5
+import legwork as lw
+import getopt, sys
+import time
+
 
 from helpers import *
 
 
-def simulate_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10, t_obs=4*u.yr,
-                      max_distance=1*u.Gpc, galaxy_density=4e6*u.Gpc**(-3),
-                      AGN_fraction=0.01, snr_cutoff=7):
+def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
+                           t_obs=4*u.yr, max_distance=1*u.Gpc,
+                           galaxy_density=4e6*u.Gpc**(-3), AGN_fraction=0.01,
+                           snr_cutoff=7):
 
     # ensure the input is sensible
     assert gamma == 1 or gamma == 2, "Gamma must be 1 or 2"
@@ -44,8 +48,8 @@ def simulate_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10, t_obs=4*u.yr,
     # randomly sample immigrant mass for each AGN based on gamma
     m_immigrant = sample_immigrant_mass(size=(n_AGN,), gamma=gamma)
 
-    m_c = legwork.utils.chirp_mass(m_oligarch, m_immigrant)
-    beta = legwork.utils.beta(m_oligarch, m_immigrant)
+    m_c = lw.utils.chirp_mass(m_oligarch, m_immigrant)
+    beta = lw.utils.beta(m_oligarch, m_immigrant)
 
     # draw eccentricity from Leigh+18 distribution
     e_enc = rejection_sampling_e(n_AGN)
@@ -53,18 +57,19 @@ def simulate_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10, t_obs=4*u.yr,
     # calculate separation based on mass, eccentricity and inspiral times
     a_enc, c0_enc = a_from_t_merge(e_enc, t_encounter_to_merge, beta)
 
-    e_evol = legwork.evol.evol_ecc(ecc_i=e_enc, beta=beta, a_i=a_enc,
+    e_evol = lw.evol.evol_ecc(ecc_i=e_enc, beta=beta, a_i=a_enc,
                                    output_vars="ecc", t_evol=t_since_encounter,
                                    n_step=2)
     e_LISA = e_evol.T[-1]
     
     # convert to separation
-    a_LISA = legwork.utils.get_a_from_ecc(e_LISA, c0_enc)
-    forb_LISA = legwork.utils.get_f_orb_from_a(a_LISA, m_oligarch, m_immigrant)
+    a_LISA = lw.utils.get_a_from_ecc(e_LISA, c0_enc)
+    forb_LISA = lw.utils.get_f_orb_from_a(a_LISA, m_oligarch, m_immigrant)
 
-    sources = legwork.source.Source(m_1=m_oligarch, m_2=m_immigrant,
-                                    dist=distance, ecc=e_LISA, f_orb=forb_LISA)
-    snr = sources.get_snr(verbose=True)
+    sources = lw.source.Source(m_1=m_oligarch, m_2=m_immigrant,
+                                    dist=distance, ecc=e_LISA, f_orb=forb_LISA,
+                                    sc_params={"t_obs": t_obs})
+    snr = sources.get_snr(t_obs=t_obs, verbose=True)
 
     sample_volume = max_distance**3
     n_AGN = galaxy_density * sample_volume * AGN_fraction
@@ -73,8 +78,107 @@ def simulate_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10, t_obs=4*u.yr,
     fraction_detectable = len(snr[snr > snr_cutoff]) / n_AGN
 
     n_detection = n_AGN * fraction_GW_emission * fraction_detectable
-    
-    return snr, n_detection
 
-snr, n_detection = simulate_AGN_rate(5)
-print(snr, n_detection)
+    params = {
+        "AGN_age": AGN_age,
+        "t_e2m": t_encounter_to_merge,
+        "t_se": t_since_encounter,
+        "m_oligarch_final": final_m_oligarch,
+        "a_enc": a_enc,
+        "e_enc": e_enc,
+        "n_detections": n_detection
+    }
+    
+    return sources, params
+
+def usage():
+    print("usage: python simulate_AGN.py [options]")
+    print("\toptions:")
+    print("\t\t-h, --help  : print usage instructions")
+    print("\t\t-o, --output: path to output h5 file")
+
+def main():
+    # get command line arguments and exit if error
+    try:
+        opts, _ = getopt.getopt(sys.argv[1:], "ho:n:g:e:m:d:G:a:s:",
+                                ["help", "output=", "n-AGN=", "gamma=",
+                                 "encounter-factor=", "mission-length=",
+                                 "max-distance=", "galaxy-density=",
+                                 "AGN-fraction=", "snr-cutoff="])
+    except getopt.GetoptError as err:
+        print(err)
+        usage()
+        sys.exit(2)
+
+    # set default values
+    output_filepath = '../output/AGN_LISA_results.h5'
+    n_AGN = 200
+    gamma = 1
+    encounter_factor = 10
+    t_obs = 4 * u.yr
+    max_distance = 1 * u.Gpc
+    galaxy_density = 4e6 * u.Gpc**(-3)
+    AGN_fraction = 0.01
+    snr_cutoff = 7  
+
+    # change defaults based on input
+    for option, value in opts:
+        if option in ("-h", "--help"):
+            usage()
+            return
+        elif option in ("-o", "--output"):
+            output_filepath = value
+        elif option in ("-n", "--n-AGN"):
+            n_AGN = int(value)
+        elif option in ("-g", "--gamma"):
+            gamma = int(value)
+        elif option in ("-e", "--encounter-factor"):
+            encounter_factor = float(value)
+        elif option in ("-m", "--mission-length"):
+            t_obs = float(value) * u.yr
+        elif option in ("-d", "--max-distance"):
+            max_distance = float(value) * u.Gpc
+        elif option in ("-G", "--galaxy-density"):
+            galaxy_density = float(value) * u.Gpc**(-3)
+        elif option in ("-a", "--AGN-fraction"):
+            AGN_fraction = float(value)
+        elif option in ("-s", "--snr-cutoff"):
+            snr_cutoff = float(value)
+
+    sources, params = simulate_LISA_AGN_rate(n_AGN=n_AGN, gamma=gamma,
+                                             encounter_factor=encounter_factor,
+                                             t_obs=t_obs,
+                                             max_distance=max_distance,
+                                             galaxy_density=galaxy_density,
+                                             AGN_fraction=AGN_fraction,
+                                             snr_cutoff=snr_cutoff)
+
+    with h5.File(output_filepath, "w") as output:
+        output["m_1"] = sources.m_1
+        output["m_2"] = sources.m_2
+        output["a_enc"] = params["a_enc"]
+        output["e_enc"] = params["e_enc"]
+        output["a_LISA"] = sources.a
+        output["e_LISA"] = sources.ecc
+        output["f_orb_LISA"] = sources.f_orb
+        output["dist"] = sources.dist
+        output["snr"] = sources.snr
+        output["max_snr_harmonic"] = sources.max_snr_harmonic
+        output["age"] = params["AGN_age"]
+        output["t_e2m"] = params["t_e2m"]
+        output["t_se"] = params["t_se"]
+        output["m_oligarch_final"] = params["m_oligarch_final"]
+
+        output.attrs["n_detect"] = params["n_detections"]
+        output.attrs["gamma"] = gamma
+        output.attrs["encounter_factor"] = encounter_factor
+        output.attrs["t_obs"] = t_obs
+        output.attrs["max_distance"] = max_distance
+        output.attrs["galaxy_density"] = galaxy_density
+        output.attrs["AGN_fraction"] = AGN_fraction
+        output.attrs["snr_cutoff"] = snr_cutoff
+
+if __name__ == "__main__":
+    start = time.time()
+    main()
+    print(time.time() - start)
