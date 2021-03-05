@@ -54,7 +54,7 @@ def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
         "Encounter factor must be between 1 and 10"
 
     # define the AGN lifetime as a megayear
-    AGN_lifetime = 1 * u.Myr
+    AGN_lifetime = 1e6 * u.yr
 
     # define the number of encounters given gamma
     n_encounters = encounter_factor * N_MERGER[gamma - 1]
