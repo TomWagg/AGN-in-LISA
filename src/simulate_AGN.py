@@ -13,7 +13,43 @@ def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
                            t_obs=4*u.yr, max_distance=1*u.Gpc,
                            galaxy_density=4e6*u.Gpc**(-3), AGN_fraction=0.01,
                            snr_cutoff=7):
+    """Simulate the number of AGN migration trap binaries that LISA will see.
 
+    Parameters
+    ----------
+    n_AGN : `int`, optional
+        Number of AGNs to simulate, by default 200
+
+    gamma : `int`, optional
+        Exponent of black hole mass distribution p(m)->m^(-gamma), by default 1
+
+    encounter_factor : `int`, optional
+        Number of encounters each binary receives, by default 10
+
+    t_obs : `float`, optional
+        LISA mission length, by default 4 years
+
+    max_distance : `float`, optional
+        Maximum distance to simulate, by default 1 Gpc
+
+    galaxy_density : `float`, optional
+        Number density of galaxies in local universe, by default 4e6 / Gpc^3
+
+    AGN_fraction : `float`, optional
+        Fraction of galaxies that are currently AGNs, by default 0.01
+
+    snr_cutoff : `int`, optional
+        SNR threshold for detection, by default 7
+
+
+    Returns
+    -------
+    sources : `Class`
+        LEGWORK sources class with all sources
+    
+    params : `dict`
+        Dictionary of parameters not included in Source class
+    """
     # ensure the input is sensible
     assert gamma == 1 or gamma == 2, "Gamma must be 1 or 2"
     assert encounter_factor >= 1 and encounter_factor <= 10,\
@@ -23,8 +59,7 @@ def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
     AGN_lifetime = 1 * u.Myr
     
     # define the number of encounters given gamma
-    n_mergers = 23 if gamma == 1 else 15
-    n_encounters = encounter_factor * n_mergers
+    n_encounters = encounter_factor * N_MERGER[gamma - 1]
 
     # work out average time between encounters
     encounter_timescale = (AGN_lifetime / n_encounters).to(u.yr)
@@ -34,7 +69,7 @@ def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
     t_encounter_to_merge = np.random.rand(n_AGN) * encounter_timescale
     t_since_encounter = np.random.rand(n_AGN) * t_encounter_to_merge
     
-    # randomly sample distance to each AGN
+    # randomly sample distance to each AGN (uniform in volume)
     distance = np.random.rand(n_AGN)**(1/3) * max_distance
     
     # randomly sample final oligarch mass for each AGN
@@ -48,33 +83,31 @@ def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
     # randomly sample immigrant mass for each AGN based on gamma
     m_immigrant = sample_immigrant_mass(size=(n_AGN,), gamma=gamma)
 
-    m_c = lw.utils.chirp_mass(m_oligarch, m_immigrant)
-    beta = lw.utils.beta(m_oligarch, m_immigrant)
-
     # draw eccentricity from Leigh+18 distribution
     e_enc = rejection_sampling_e(n_AGN)
     
     # calculate separation based on mass, eccentricity and inspiral times
+    beta = lw.utils.beta(m_oligarch, m_immigrant)
     a_enc, c0_enc = a_from_t_merge(e_enc, t_encounter_to_merge, beta)
 
     e_evol = lw.evol.evol_ecc(ecc_i=e_enc, beta=beta, a_i=a_enc,
-                                   output_vars="ecc", t_evol=t_since_encounter,
-                                   n_step=2)
+                              output_vars="ecc", t_evol=t_since_encounter,
+                              n_step=2)
     e_LISA = e_evol.T[-1]
     
     # convert to separation
     a_LISA = lw.utils.get_a_from_ecc(e_LISA, c0_enc)
-    forb_LISA = lw.utils.get_f_orb_from_a(a_LISA, m_oligarch, m_immigrant)
+    f_orb_LISA = lw.utils.get_f_orb_from_a(a_LISA, m_oligarch, m_immigrant)
 
     sources = lw.source.Source(m_1=m_oligarch, m_2=m_immigrant,
-                                    dist=distance, ecc=e_LISA, f_orb=forb_LISA,
-                                    sc_params={"t_obs": t_obs})
+                               dist=distance, ecc=e_LISA, f_orb=f_orb_LISA,
+                               sc_params={"t_obs": t_obs})
     snr = sources.get_snr(t_obs=t_obs, verbose=True)
 
     sample_volume = max_distance**3
     n_AGN = galaxy_density * sample_volume * AGN_fraction
     fraction_GW_emission = (encounter_timescale / AGN_lifetime
-                            * n_mergers).decompose()
+                            * N_MERGER[gamma - 1]).decompose()
     fraction_detectable = len(snr[snr > snr_cutoff]) / n_AGN
 
     n_detection = n_AGN * fraction_GW_emission * fraction_detectable
