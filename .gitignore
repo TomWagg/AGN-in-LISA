@@ -132,3 +132,4 @@ dmypy.json
 output/*.h5
 data/*.h5
 .DS_store
+plots/*.pdf
