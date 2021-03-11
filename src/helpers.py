@@ -163,6 +163,9 @@ def fit_final_oligarch_mass(gamma, a_BH=1.0, size=500000):
     -------
     fit : `tuple`
         Fit for mass distribution
+
+    bounds : `tuple`
+        Minimum and maximum simulated masses
     """
 
     m_immigrants = sample_immigrant_mass(gamma=gamma,

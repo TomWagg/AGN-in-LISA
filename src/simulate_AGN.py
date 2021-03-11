@@ -106,8 +106,7 @@ def simulate_LISA_AGN_rate(n_AGN=200, gamma=1, encounter_factor=10,
 
     sample_volume = max_distance**3
     n_AGN = galaxy_density * sample_volume * AGN_fraction
-    fraction_GW_emission = (encounter_timescale / AGN_lifetime
-                            * N_MERGER[gamma - 1]).decompose()
+    fraction_GW_emission = 1 / encounter_factor
     fraction_detectable = len(snr[snr > snr_cutoff]) / n_AGN
 
     n_detection = n_AGN * fraction_GW_emission * fraction_detectable
@@ -204,7 +203,7 @@ def main():
             loops = int(value)
 
     # check the file can be created without error
-    with h5.File(output_filepath, "w") as output:
+    with h5.File(output_filepath.replace(".h5", "_loop0.h5"), "w") as output:
         output["test"] = "TEST"
 
     for i in range(loops):
