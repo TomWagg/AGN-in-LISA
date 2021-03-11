@@ -6,10 +6,10 @@ from legwork.utils import get_a_from_ecc
 
 
 N_MERGER = [23, 15]
-FIT = [(29.297949585222668, 62.96530857667944,
-        55.55805086465139, 1240.7546363412412),
-       (7.346366250385888, 29.09437427063913,
-        81.18656481894848, 549.1138062470097)]
+FIT = [(34.55387671901061, 74.89576244079865,
+        19.688610898930914, 1084.718030730763),
+       (6.98249469541844, 23.979991700875626,
+       66.28116728466077, 401.3853748298194)]
 
 
 def p_e(e):
@@ -102,7 +102,54 @@ def sample_immigrant_mass(size=(1000,), gamma=1, m_min=5*u.Msun,
     return m_imm
 
 
-def fit_final_oligarch_mass(gamma, size=500000):
+def merger_mass_loss(q, a_1, a_2):
+    """Compute mass lost during a GW merger between two BHs. Expression from
+    Tichy & Marronetti 2008.
+
+    Parameters
+    ----------
+    q : `float/array`
+        Mass ratio of binary
+    a_1 : `float/array`
+        Spin of primary BH
+    a_2 : `float/array`
+        Spin of secondary BH
+
+    Returns
+    -------
+    loss : `float/array`
+        Fraction of total binary mass lost during merger
+    """
+    v = q / (1 + q)**2
+    loss = 0.2 * v + 0.208 * v**2 * (a_1 + a_2)
+    return loss
+
+
+def merger_final_spin(q, a_1, a_2):
+    """Compute final BH spin after a GW merger between two BHs. Expression from
+    Tichy & Marronetti 2008.
+
+    Parameters
+    ----------
+    q : `float/array`
+        Mass ratio of binary
+    a_1 : `float/array`
+        Spin of primary BH
+    a_2 : `float/array`
+        Spin of secondary BH
+
+    Returns
+    -------
+    a_f : `float/array`
+        Final spin of the BH after merger
+    """
+    v = q / (1 + q)**2
+    a_f = 0.686 * (5.04 * v - 4.16 * v**2)\
+        + 0.4 * ((a_1 / (0.632 + 1 / q)**2) + (a_2 / (0.632 + q)**2))
+    return a_f
+
+
+def fit_final_oligarch_mass(gamma, a_BH=1.0, size=500000):
     """Produce a fit for the final oligarch mass distribution
 
     Parameters
@@ -117,9 +164,21 @@ def fit_final_oligarch_mass(gamma, size=500000):
     fit : `tuple`
         Fit for mass distribution
     """
-    final_mass_sample = sample_immigrant_mass((N_MERGER[gamma - 1], size),
-                                              gamma=gamma).sum(axis=0)
-    return beta.fit(data=final_mass_sample.value)
+
+    m_immigrants = sample_immigrant_mass(gamma=gamma,
+                                         size=(N_MERGER[gamma - 1], size))
+
+    m_oligarch = m_immigrants[0, :]
+    aIMBH = np.repeat(a_BH, size)
+
+    for i in range(1, N_MERGER[gamma - 1]):
+        q = m_immigrants[i, :] / m_oligarch
+        m_binary = m_oligarch + m_immigrants[i, :]
+        m_oligarch = m_binary * (1 - merger_mass_loss(q, aIMBH, a_BH))
+        aIMBH = merger_final_spin(q, aIMBH, a_BH)
+
+    return beta.fit(data=m_oligarch.value), (np.min(m_oligarch.value),
+                                             np.max(m_oligarch.value))
 
 
 def a_from_t_merge(ecc_i, t_merge, beta):
